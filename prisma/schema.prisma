@@ -13,5 +13,7 @@ datasource db {
 model File {
   id String @id @defalt(cuid())
   name String
+  key String
+  contentType String
   createdAT DateTime @defalt(now())
 }
