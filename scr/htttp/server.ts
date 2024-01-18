@@ -1,10 +1,11 @@
 import fastify from "fastify";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectAclCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl }  from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 import { r2 } from "../lib/cloudflare";
 import { PrismaClient } from '@prisma/client';
 import { z } from "zod";
+import { request } from "http";
 
 const app = fastify()
 
@@ -30,7 +31,7 @@ app.post('/uploads', async (request) => {
         { expiresIn: 600 }
     )
 
-    await prisma.file.create({
+    const file = await prisma.file.create({
         data: {
             name,
             contentType,
@@ -38,7 +39,32 @@ app.post('/uploads', async (request) => {
         }
     })
 
-    return signedUrl
+    return { signedUrl, fileId: file.id } 
+})
+
+app.get('/uploads/:id', async (request) => {
+    const getFileParamsSchema = z.object({
+        id: z.string().cuid(),
+    })
+
+    const { id } = getFileParamsSchema.parse(request.params)
+
+    const file = await prisma.file.findUniqueOrThrow({
+        where: {
+            id,
+        }
+    })
+
+    const signedUrl = await getSignedUrl(
+        r2,
+        new GetObjectAclCommand({
+            Bucket: 'rabbithole-prod',
+            Key: file.key
+        }),
+        { expiresIn: 600 }
+    )
+
+    return { signedUrl }
 })
 
 app.listen({
